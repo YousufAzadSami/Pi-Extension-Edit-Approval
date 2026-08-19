@@ -81,7 +81,7 @@ D:/personal/Pi-Extension-Edit-Approval = verified Work Desktop clone
 
 ## Current status
 
-- **Overall status:** Milestones 0, 1, and 2 complete; ready to begin Milestone 3.
+- **Overall status:** Milestones 0, 1, and 2 complete; Milestone 3 in progress. The write-preview work is documented and postponed, and per-entry edit approval is next.
 - **Intended extension scope:** Global on both the Work Laptop and Work Desktop.
 - **Extension implementation:** `change-approval.ts` intercepts `edit` and `write`, displays the target path, and supports Yes/No/Other approval with custom rejection feedback.
 - **Repository files:** `.gitignore`, `change-approval.ts`, this canonical plan, and an untracked disposable `sample.txt` test file.
@@ -549,43 +549,70 @@ D:/personal/Pi-Extension-Edit-Approval/change-approval.ts
 3. A revised edit causes another approval prompt.
 4. Only a later explicit Yes executes the revised edit.
 
-### Milestone 3 — understand and improve terminal previews
+### Milestone 3 — preview findings and per-entry edit approval
 
-**Status:** Pending.
+**Status:** In progress — write-preview enhancements postponed; per-entry edit approval is next.
 
-**Goal:** Make proposed changes understandable without leaving the terminal.
+**Goal:** Record the observed preview limitations and implement the workflow-critical ability to approve or reject each entry in a multi-entry `edit` call independently.
 
-**Steps:**
+#### 3W — `write` behavior: documented and postponed
 
-1. Test Pi's existing pre-execution edit diff.
-2. Test write-content expansion.
-3. Decide whether the existing transcript plus `ctx.ui.select` is sufficiently visible.
-4. If not, create a custom TUI approval component that combines:
-   - operation;
-   - path;
-   - rationale when available;
-   - diff/content preview;
-   - Yes/No/Other choices;
-   - keyboard help.
-5. Add a true old/new diff for `write`.
+Manual testing confirmed that Pi's built-in `write` renderer shows the proposed content, initially collapsed for a large file with an expansion shortcut. This is acceptable for creating a new file at the current stage.
+
+The same tool can also completely overwrite an existing file. Its built-in renderer shows the proposed replacement content but not a true old-versus-new diff. Producing a clear, scrollable overwrite diff inside the approval dialog would require new preview-generation and custom TUI work.
+
+**Decision:** Do not implement a custom write-diff TUI now. Keep permission approval for every `write`, document the overwrite limitation, and reconsider the richer preview together with the external diff viewer in Milestone 5.
+
+#### 3E — `edit` behavior: implement now
+
+Pi's built-in `edit` input contains an `edits` array. A single tool call may therefore contain several disjoint replacements. Manual testing with three entries showed one combined diff that overflowed the visible terminal area and one approval question for the complete call.
+
+The required behavior is:
+
+1. Read the proposed entries from `event.input.edits`.
+2. Present them sequentially as `Edit 1 of N`, `Edit 2 of N`, and so on.
+3. Show the current entry's exact old and new text using the existing basic terminal UI; do not introduce a custom diff TUI in this step.
+4. Ask Yes/No/Other separately for each entry.
+5. **Yes** adds only that entry to the approved set.
+6. **No** excludes only that entry and continues to the next one.
+7. **Other** collects feedback, excludes only that entry, and continues to the next one.
+8. Do not modify the file while individual decisions are still being collected.
+9. After all decisions, mutate `event.input.edits` to contain only the approved entries. Pi 0.84.2 explicitly permits a `tool_call` handler to mutate `event.input` before execution.
+10. Allow Pi's built-in edit tool to apply all approved entries together in one filesystem write.
+11. If no entries were approved, block the complete tool call.
+12. Preserve rejected-entry feedback for the model. When approved and rejected entries are mixed, associate the rejection summary with `toolCallId` and append it in the corresponding `tool_result`, then remove the temporary state.
+
+This design means that decisions Yes/No/Yes execute entries 1 and 3 while leaving entry 2 unchanged. Applying the approved subset together keeps every decision based on the same original file and avoids changing line positions between prompts.
+
+**Implementation sub-steps:**
+
+1. **3E.1 — sequential Yes/No decisions:** Narrow the event to the built-in edit type, loop over its entries, display one entry at a time, collect approvals, and filter `event.input.edits`.
+2. **3E.2 — per-entry Other feedback:** Reuse the current feedback input for an individual entry and continue through the remaining entries.
+3. **3E.3 — mixed-result reporting:** Track rejected entries by `toolCallId` and add their summaries to the edit tool result so the model knows what did not execute and why.
+4. **3E.4 — manual testing:** Verify all-Yes, all-No, Yes/No/Yes, middle-entry Other, cancellation, invalid edit text, and a large individual entry.
+5. **3E.5 — optional renderer cleanup:** After behavior is correct, decide whether Pi's original combined edit rendering should be replaced with a compact summary. This is not required for the first per-entry implementation.
 
 **Concepts taught:**
 
-- TUI components;
-- rendering width;
-- keyboard handling;
-- ANSI-safe wrapping;
-- terminal themes;
-- reading without mutating;
-- creating previews in memory.
+- typed narrowing with `isToolCallEventType()`;
+- arrays, loops, and filtering;
+- accumulating decisions without immediate side effects;
+- supported in-place mutation of tool arguments;
+- correlating `tool_call` and `tool_result` with `toolCallId`;
+- temporary `Map` state and cleanup.
 
 **Acceptance criteria:**
 
-- The proposed change is visible before approval.
-- Preview code never writes the target file.
-- Large previews are truncated or scrollable.
-- Added and removed lines are visually distinguishable.
-- Preview errors cause a safe rejection or clearly warn the user.
+1. A three-entry edit produces three sequential approval questions.
+2. Each question identifies its entry number and shows only that entry's proposed old/new text.
+3. Yes/No/Yes executes only entries 1 and 3.
+4. No and cancellation reject only the current entry and continue.
+5. Other rejects only the current entry, preserves non-empty feedback, and continues.
+6. No file modification occurs until all entries have been reviewed.
+7. Approved entries execute together through Pi's built-in edit implementation.
+8. If all entries are rejected, the original tool call is blocked and the file remains unchanged.
+9. The model receives a clear summary of rejected entries and any custom feedback.
+10. Temporary decision state is removed after the matching tool result or complete blocking.
 
 ### Milestone 4 — require a user-facing rationale
 
@@ -625,7 +652,7 @@ D:/personal/Pi-Extension-Edit-Approval/change-approval.ts
 
 **Status:** Pending.
 
-**Goal:** Optionally inspect a proposal in VS Code or KDiff3 before deciding.
+**Goal:** Optionally inspect a proposal in VS Code or KDiff3 before deciding. Reconsider the postponed old-versus-new preview for existing-file `write` operations as part of this work, avoiding a separate custom terminal diff TUI if the external viewer satisfies the workflow.
 
 **Proposed process:**
 
@@ -822,11 +849,13 @@ Additional rules:
 9. **Do not fabricate semantic rationale from path/edit data.**
 10. **Add a required concise `reason` through wrapped tools in a later milestone.**
 11. **The finished extension will be global, meaning available to all Pi projects on each machine where it is installed.**
-12. **Develop outside Argon in a machine-specific clone: `D:/others/Pi-Extension` on the Work Laptop and planned `D:/personal/Pi-Extension` on the Work Desktop.**
+12. **Develop outside Argon in a machine-specific clone: `D:/others/Pi-Extension` on the Work Laptop and `D:/personal/Pi-Extension-Edit-Approval` on the Work Desktop.**
 13. **Use `https://github.com/YousufAzadSami/Pi-Extension-Edit-Approval` as the canonical source shared by both machines.**
 14. **Keep the canonical plan at `docs/learning-and-implementation-plan.md` in that repository and retain only a stable pointer in Argon.**
 15. **Develop with explicit `pi -e` loading; install the stable package globally and separately on both machines.**
 16. **No extension code is to be created merely because this plan was approved. Implementation still requires a separate explicit approval.**
+17. **Accept Pi's built-in `write` content preview for now; postpone a true existing-file overwrite diff and custom preview TUI for reconsideration with Milestone 5's external viewer.**
+18. **For multi-entry `edit` calls, ask separately for each entry and execute the approved subset; rejecting one entry must not prevent other approved entries from executing.**
 
 ## Open questions
 
@@ -835,7 +864,7 @@ Resolve these only when their milestone is reached:
 1. Should permission apply only to built-in `edit`/`write`, or eventually to Bash/custom mutation tools too?
 2. Should every operation always ask, or should future modes include allow-for-session/path?
 3. Should `Other` use a single-line input or a multi-line editor?
-4. Is the existing edit preview visible enough while `ctx.ui.select` is open?
+4. After per-entry approval works, is Pi's original combined edit renderer still useful, or should it be replaced by a compact summary?
 5. Which external viewer is preferred: VS Code, KDiff3, or configurable order?
 6. Should external-viewer launch be automatic or selected from the dialog?
 7. Should approvals and rejections be persisted as TUI-only session entries for auditing?
@@ -900,4 +929,4 @@ Relevant installed implementation/type declarations inspected:
 
 ## Next recommended action
 
-Start **Milestone 3** by testing and documenting Pi's existing pre-execution previews for valid `edit` calls and both new-file and existing-file `write` calls. Determine whether the built-in transcript preview remains sufficiently visible while the approval selector is open before implementing any custom TUI or diff logic.
+Start **Milestone 3E.1** with the smallest code change that handles sequential Yes/No decisions for each entry in an `edit` call. Use `isToolCallEventType("edit", event)` for typed input, collect approved entries without executing immediately, replace `event.input.edits` with the approved subset, and block only when the subset is empty. Keep the existing single Yes/No/Other workflow for `write` unchanged. Add per-entry Other feedback and mixed-result reporting only in the following sub-steps.
