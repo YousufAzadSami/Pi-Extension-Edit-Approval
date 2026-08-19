@@ -2,7 +2,7 @@
 description: Incremental learning and implementation plan for a Pi extension that approves edit/write operations and previews proposed changes
 tags: [pi, extension, typescript, permissions, edit, write, diff, vscode, learning-plan]
 applies_to: [pi-coding-agent, personal-development-workflow]
-status: planning
+status: in-progress
 ---
 
 # Pi edit/write approval extension — learning and implementation plan
@@ -55,7 +55,7 @@ The local clone paths are machine-specific:
 | Machine | Local source/learning workspace |
 |---|---|
 | Work Laptop (current machine) | `D:/others/Pi-Extension` |
-| Work Desktop | `D:/personal/Pi-Extension` (planned; parent directory reported as `D:/personal/`) |
+| Work Desktop (current machine) | `D:/personal/Pi-Extension-Edit-Approval` |
 
 Each clone will eventually contain the same TypeScript source, learning notes, tests, and package configuration. Absolute clone paths are local details, not the identity of the project. Documentation and commands should use `<local-clone>` or repository-relative paths whenever practical.
 
@@ -75,23 +75,23 @@ GitHub repository                     = canonical extension source
                                       = canonical plan
 Argon .windsurf/plans pointer         = link to the canonical plan, not a second copy
 D:/others/Pi-Extension                = Work Laptop clone
-D:/personal/Pi-Extension              = planned Work Desktop clone
+D:/personal/Pi-Extension-Edit-Approval = verified Work Desktop clone
 ~/.pi/agent/... on each machine       = separate per-machine global installation
 ```
 
 ## Current status
 
-- **Overall status:** Repository setup complete; extension implementation not started.
+- **Overall status:** Milestones 0 and 1 complete; ready to begin Milestone 2.
 - **Intended extension scope:** Global on both the Work Laptop and Work Desktop.
-- **Extension implementation:** Not started.
-- **Repository files:** `.gitignore` and this canonical plan; no extension source yet.
+- **Extension implementation:** `change-approval.ts` intercepts `edit` and `write`, displays the target path, and supports Yes/No approval.
+- **Repository files:** `.gitignore`, `change-approval.ts`, this canonical plan, and an untracked disposable `sample.txt` test file.
 - **Plan created and migrated:** Yes.
-- **Current Pi version observed:** `0.83.0`.
-- **Current machine:** Work Laptop.
+- **Current Pi version observed:** `0.84.2`.
+- **Current machine:** Work Desktop.
 - **Work Laptop clone:** `D:/others/Pi-Extension`.
-- **Work Desktop clone:** `D:/personal/Pi-Extension` (planned, not yet verified or created).
+- **Work Desktop clone:** `D:/personal/Pi-Extension-Edit-Approval` (verified).
 - **Git repository:** `https://github.com/YousufAzadSami/Pi-Extension-Edit-Approval.git`, configured locally as `origin`.
-- **Current local branch:** `main`, tracking `origin/main`.
+- **Current local branch:** `Milestone-01`, tracking `origin/Milestone-01` and currently one commit ahead before this plan update.
 - **Canonical plan:** `docs/learning-and-implementation-plan.md` in the extension repository.
 - **Argon handoff file:** A stable GitHub and repository-relative pointer to the canonical plan.
 
@@ -109,11 +109,11 @@ Whenever Pi invokes the built-in `edit` or `write` tool:
 4. Ask the user to choose one of:
    - **Yes** — execute the proposed operation.
    - **No** — reject the proposed operation.
-   - **Others** — let the user write custom feedback about the proposal.
+   - **Other** — let the user write custom feedback about the proposal.
 
-### Meaning of `Others`
+### Meaning of `Other`
 
-`Others` must not silently alter and execute the original operation.
+`Other` must not silently alter and execute the original operation.
 
 The safe behavior is:
 
@@ -349,7 +349,7 @@ const choice = await ctx.ui.select(...);
 The first implementation can use:
 
 ```ts
-await ctx.ui.select(title, ["Yes", "No", "Others"]);
+await ctx.ui.select(title, ["Yes", "No", "Other"]);
 await ctx.ui.input(title, placeholder);
 ctx.ui.notify(message, "info");
 ```
@@ -452,7 +452,7 @@ Each milestone should be completed, explained, and tested before moving to the n
 
 ### Milestone 0 — establish the learning workspace
 
-**Status:** Pending.
+**Status:** Complete.
 
 **Goal:** Create only the minimum source file needed for the first extension test.
 
@@ -462,10 +462,10 @@ Each milestone should be completed, explained, and tested before moving to the n
 <local-clone>/change-approval.ts
 ```
 
-For the current Work Laptop session, this expands to:
+For the current Work Desktop session, this expands to:
 
 ```text
-D:/others/Pi-Extension/change-approval.ts
+D:/personal/Pi-Extension-Edit-Approval/change-approval.ts
 ```
 
 **Concepts taught:**
@@ -485,7 +485,9 @@ D:/others/Pi-Extension/change-approval.ts
 
 ### Milestone 1 — intercept edit/write with Yes and No
 
-**Status:** Pending.
+**Status:** Complete.
+
+**Test record:** The user manually verified non-target tool handling, approved and rejected `write` calls, and approved and rejected `edit` calls. Approved operations executed; rejected operations left the target unchanged. The `ctx.hasUI === false` path was intentionally not tested for this milestone and is deferred.
 
 **Goal:** Prove the smallest complete permission loop.
 
@@ -515,15 +517,15 @@ D:/others/Pi-Extension/change-approval.ts
 4. Selecting Yes allows the requested change.
 5. Cancelling leaves the file unchanged.
 
-### Milestone 2 — add `Others` feedback
+### Milestone 2 — add `Other` feedback
 
-**Status:** Pending.
+**Status:** Next.
 
 **Goal:** Let the user reject an operation with custom guidance.
 
 **Behavior:**
 
-- Add the exact option label `Others`.
+- Add the exact option label `Other`.
 - Selecting it opens an input dialog.
 - Non-empty feedback is included in the block reason.
 - Empty/cancelled feedback still blocks the original operation.
@@ -540,7 +542,7 @@ D:/others/Pi-Extension/change-approval.ts
 
 **Acceptance criteria:**
 
-1. The original operation never executes after selecting Others.
+1. The original operation never executes after selecting Other.
 2. The model receives the custom feedback.
 3. A revised edit causes another approval prompt.
 4. Only a later explicit Yes executes the revised edit.
@@ -561,7 +563,7 @@ D:/others/Pi-Extension/change-approval.ts
    - path;
    - rationale when available;
    - diff/content preview;
-   - Yes/No/Others choices;
+   - Yes/No/Other choices;
    - keyboard help.
 5. Add a true old/new diff for `write`.
 
@@ -613,7 +615,7 @@ D:/others/Pi-Extension/change-approval.ts
 1. The model cannot invoke wrapped edit/write without a reason accepted by the schema.
 2. The reason appears in the permission UI.
 3. Yes delegates to Pi's original implementation.
-4. No/Others prevent delegation.
+4. No/Other prevent delegation.
 5. Existing edit/write result shapes and rendering still work.
 6. The dialog labels the text as the model's stated reason, not as verified truth.
 
@@ -692,7 +694,7 @@ Start with hard-coded safe defaults. Add configuration only after core behavior 
 - Yes allows;
 - No blocks;
 - Escape blocks;
-- Others always blocks the original call;
+- Other always blocks the original call;
 - custom feedback is preserved;
 - write preview handles missing/existing files;
 - edit preview handles multiple replacements;
@@ -725,14 +727,14 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
 
         const choice = await ctx.ui.select(
             `Approve ${event.toolName} operation?\n\nFile: ${path}`,
-            ["Yes", "No", "Others"],
+            ["Yes", "No", "Other"],
         );
 
         if (choice === "Yes") {
             return undefined;
         }
 
-        if (choice === "Others") {
+        if (choice === "Other") {
             const feedback = await ctx.ui.input(
                 "What should Pi do instead?",
                 "Write your instructions",
@@ -754,7 +756,7 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
 }
 ```
 
-For the smallest teaching steps, this may be introduced first as Yes/No and then extended with Others rather than written all at once.
+Milestone 1 introduced Yes/No first. Milestone 2 will now add Other as a separate, small learning step.
 
 ## Manual test strategy
 
@@ -780,7 +782,7 @@ Suggested prompts:
 4. Ask Pi to create `new.txt`.
    - Select No.
    - Expected: file is not created.
-5. Repeat and select Others; write `Use the name revised.txt instead.`
+5. Repeat and select Other; write `Use the name revised.txt instead.`
    - Expected: original write is blocked; model proposes a new operation; new operation asks again.
 6. Run Pi in print mode with the extension and request a write.
    - Expected: operation is blocked because no approval UI is available.
@@ -793,7 +795,7 @@ Until the extension itself is active and tested, the assistant working on this p
 
 1. Explain each proposed edit/write.
 2. Show the target path and proposed content/diff.
-3. Ask for Yes, No, or Others.
+3. Ask for Yes, No, or Other.
 4. Do not invoke edit/write until the user approves.
 
 Additional rules:
@@ -812,7 +814,7 @@ Additional rules:
 3. **Use `tool_call` as the permission interception point.**
 4. **Fail closed when approval cannot be requested.**
 5. **Treat Escape/cancel as No.**
-6. **`Others` blocks the original operation and sends feedback to the model.**
+6. **`Other` blocks the original operation and sends feedback to the model.**
 7. **Reuse Pi's existing edit preview first.**
 8. **Add a true write diff later.**
 9. **Do not fabricate semantic rationale from path/edit data.**
@@ -830,7 +832,7 @@ Resolve these only when their milestone is reached:
 
 1. Should permission apply only to built-in `edit`/`write`, or eventually to Bash/custom mutation tools too?
 2. Should every operation always ask, or should future modes include allow-for-session/path?
-3. Should `Others` use a single-line input or a multi-line editor?
+3. Should `Other` use a single-line input or a multi-line editor?
 4. Is the existing edit preview visible enough while `ctx.ui.select` is open?
 5. Which external viewer is preferred: VS Code, KDiff3, or configurable order?
 6. Should external-viewer launch be automatic or selected from the dialog?
@@ -854,7 +856,7 @@ At the beginning of a later session:
 8. Identify the first milestone whose status is still Pending.
 9. Explain that milestone and the exact proposed change.
 10. Show the proposed edit/write.
-11. Ask the user for **Yes**, **No**, or **Others**.
+11. Ask the user for **Yes**, **No**, or **Other**.
 12. After implementation, update the canonical plan's status and record test results.
 
 At the end of each implementation session, update:
@@ -896,4 +898,4 @@ Relevant installed implementation/type declarations inspected:
 
 ## Next recommended action
 
-Start **Milestone 0 / Milestone 1** by proposing the smallest `change-approval.ts` version that handles only edit/write Yes/No approval. Show the complete new file and explain every block before asking permission to create it.
+Start **Milestone 2** by adding the `Other` choice to `change-approval.ts`. Selecting it should collect custom feedback, always block the original operation, and return non-empty feedback to the model in the blocking reason. Explain the small TypeScript and Pi UI additions before implementing and then manually test the Milestone 2 acceptance criteria.
