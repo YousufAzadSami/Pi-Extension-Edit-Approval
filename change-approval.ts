@@ -37,11 +37,27 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
 
         const choice = await ctx.ui.select(
             `Approve ${event.toolName} operation?\n\nFile: ${path}`,
-            ["Yes", "No"],
+            ["Yes", "No", "Other"],
         );
 
         if (choice === "Yes") {
             return undefined;
+        }
+
+        if (choice === "Other") {
+            const feedback = await ctx.ui.input(
+                "What should Pi do instead?",
+                "Write your instructions",
+            );
+
+            const trimmedFeedback = feedback?.trim();
+
+            return {
+                block: true,
+                reason: trimmedFeedback
+                    ? `User rejected this operation with feedback: ${trimmedFeedback}`
+                    : "User rejected this operation without additional feedback",
+            };
         }
 
         return {

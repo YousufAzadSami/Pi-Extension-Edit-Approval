@@ -81,9 +81,9 @@ D:/personal/Pi-Extension-Edit-Approval = verified Work Desktop clone
 
 ## Current status
 
-- **Overall status:** Milestones 0 and 1 complete; ready to begin Milestone 2.
+- **Overall status:** Milestones 0, 1, and 2 complete; ready to begin Milestone 3.
 - **Intended extension scope:** Global on both the Work Laptop and Work Desktop.
-- **Extension implementation:** `change-approval.ts` intercepts `edit` and `write`, displays the target path, and supports Yes/No approval.
+- **Extension implementation:** `change-approval.ts` intercepts `edit` and `write`, displays the target path, and supports Yes/No/Other approval with custom rejection feedback.
 - **Repository files:** `.gitignore`, `change-approval.ts`, this canonical plan, and an untracked disposable `sample.txt` test file.
 - **Plan created and migrated:** Yes.
 - **Current Pi version observed:** `0.84.2`.
@@ -519,7 +519,9 @@ D:/personal/Pi-Extension-Edit-Approval/change-approval.ts
 
 ### Milestone 2 — add `Other` feedback
 
-**Status:** Next.
+**Status:** Complete.
+
+**Test record:** The user verified that selecting Other with empty or cancelled input blocks the original operation without feedback, while non-empty input is returned to the model in the blocking reason. The model responded to the feedback, submitted a revised edit, displayed another approval prompt, and executed the revised edit only after a later explicit Yes.
 
 **Goal:** Let the user reject an operation with custom guidance.
 
@@ -756,7 +758,7 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
 }
 ```
 
-Milestone 1 introduced Yes/No first. Milestone 2 will now add Other as a separate, small learning step.
+Milestone 1 introduced Yes/No first, and Milestone 2 subsequently added Other as a separate, small learning step.
 
 ## Manual test strategy
 
@@ -898,4 +900,4 @@ Relevant installed implementation/type declarations inspected:
 
 ## Next recommended action
 
-Start **Milestone 2** by adding the `Other` choice to `change-approval.ts`. Selecting it should collect custom feedback, always block the original operation, and return non-empty feedback to the model in the blocking reason. Explain the small TypeScript and Pi UI additions before implementing and then manually test the Milestone 2 acceptance criteria.
+Start **Milestone 3** by testing and documenting Pi's existing pre-execution previews for valid `edit` calls and both new-file and existing-file `write` calls. Determine whether the built-in transcript preview remains sufficiently visible while the approval selector is open before implementing any custom TUI or diff logic.
