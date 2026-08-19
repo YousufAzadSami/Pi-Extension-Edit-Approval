@@ -39,6 +39,48 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
             };
         }
 
+        if (isToolCallEventType("edit", event)) {
+            const rejectionReasons: string[] = [];
+
+            for (const [index, edit] of event.input.edits.entries()) {
+                const editNumber = index + 1;
+                const choice = await ctx.ui.select(
+                    `Approve edit ${editNumber} of ${event.input.edits.length}?\n\nFile: ${path}\n\nOld text:\n${edit.oldText}\n\nNew text:\n${edit.newText}`,
+                    ["Yes", "No", "Other"],
+                );
+
+                if (choice === "Yes") {
+                    continue;
+                }
+
+                if (choice === "Other") {
+                    const feedback = await ctx.ui.input(
+                        `What should Pi do instead for edit ${editNumber}?`,
+                        "Write your instructions",
+                    );
+                    const trimmedFeedback = feedback?.trim();
+
+                    rejectionReasons.push(trimmedFeedback
+                        ? `Edit ${editNumber} rejected with feedback: ${trimmedFeedback}`
+                        : `Edit ${editNumber} rejected without additional feedback`);
+                    continue;
+                }
+
+                rejectionReasons.push(choice === "No"
+                    ? `Edit ${editNumber} rejected by the user`
+                    : `Edit ${editNumber} approval was cancelled`);
+            }
+
+            if (rejectionReasons.length === 0) {
+                return undefined;
+            }
+
+            return {
+                block: true,
+                reason: `User rejected one or more edit entries:\n${rejectionReasons.join("\n")}`,
+            };
+        }
+
         const choice = await ctx.ui.select(
             `Approve ${event.toolName} operation?\n\nFile: ${path}`,
             ["Yes", "No", "Other"],
