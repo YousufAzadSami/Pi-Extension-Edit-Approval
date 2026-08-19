@@ -40,7 +40,9 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
         }
 
         if (isToolCallEventType("edit", event)) {
+            const approvedEdits: typeof event.input.edits = [];
             const rejectionReasons: string[] = [];
+            let otherWasSelected = false;
 
             for (const [index, edit] of event.input.edits.entries()) {
                 const editNumber = index + 1;
@@ -50,10 +52,12 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
                 );
 
                 if (choice === "Yes") {
+                    approvedEdits.push(edit);
                     continue;
                 }
 
                 if (choice === "Other") {
+                    otherWasSelected = true;
                     const feedback = await ctx.ui.input(
                         `What should Pi do instead for edit ${editNumber}?`,
                         "Write your instructions",
@@ -71,14 +75,15 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
                     : `Edit ${editNumber} approval was cancelled`);
             }
 
-            if (rejectionReasons.length === 0) {
-                return undefined;
+            if (otherWasSelected || approvedEdits.length === 0) {
+                return {
+                    block: true,
+                    reason: `User rejected one or more edit entries:\n${rejectionReasons.join("\n")}`,
+                };
             }
 
-            return {
-                block: true,
-                reason: `User rejected one or more edit entries:\n${rejectionReasons.join("\n")}`,
-            };
+            event.input.edits = approvedEdits;
+            return undefined;
         }
 
         const choice = await ctx.ui.select(
