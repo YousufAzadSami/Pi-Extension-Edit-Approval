@@ -1,6 +1,7 @@
-import type {
-    ExtensionAPI,
-    ExtensionContext,
+import {
+    isToolCallEventType,
+    type ExtensionAPI,
+    type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
 const DEBUG_ENABLED: boolean = true;
@@ -16,16 +17,19 @@ function debugNotify(ctx: ExtensionContext, message: string): void {
 export default function changeApprovalExtension(pi: ExtensionAPI) {
     pi.on("tool_call", async function handleToolCall(event, ctx) {
 
-        if (event.toolName !== "edit" && event.toolName !== "write") {
+        let path: string;
 
+        if (isToolCallEventType("edit", event)) {
+            path = event.input.path;
+        } else if (isToolCallEventType("write", event)) {
+            path = event.input.path;
+        } else {
             // Sami: How can I print the other toolNames here? For debug and learning purposes
             debugNotify(ctx, `Ignoring tool: ${event.toolName}`);
-
             return undefined;
         }
 
-        const path = event.input.path as string;
-        // Sami: Same for path, I would like to see the Path 
+        // Sami: Same for path, I would like to see the Path
         debugNotify(ctx, `Target path: ${path}`);
 
         if (!ctx.hasUI) {
