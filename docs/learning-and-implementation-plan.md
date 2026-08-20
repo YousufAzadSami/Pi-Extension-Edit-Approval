@@ -81,9 +81,9 @@ D:/personal/Pi-Extension-Edit-Approval = verified Work Desktop clone
 
 ## Current status
 
-- **Overall status:** Milestones 0, 1, and 2 complete; Milestone 3 in progress. The write-preview work is documented and postponed, and per-entry edit approval is next.
+- **Overall status:** Milestones 0, 1, and 2 complete; Milestone 3 in progress. Write-preview enhancements are postponed. The 3E.1 per-entry Yes/No implementation is in place, and the session stopped immediately before manual verification.
 - **Intended extension scope:** Global on both the Work Laptop and Work Desktop.
-- **Extension implementation:** `change-approval.ts` intercepts `edit` and `write`, displays the target path, and supports Yes/No/Other approval with custom rejection feedback.
+- **Extension implementation:** `change-approval.ts` intercepts `edit` and `write`. Write retains one whole-operation Yes/No/Other prompt. Edit now displays each `edits[]` entry sequentially, collects approved entries, and mutates the input to the approved subset. Other still blocks the complete edit call temporarily until 3E.2/3E.3.
 - **Repository files:** `.gitignore`, `change-approval.ts`, this canonical plan, and an untracked disposable `sample.txt` test file.
 - **Plan created and migrated:** Yes.
 - **Current Pi version observed:** `0.84.2`.
@@ -586,11 +586,21 @@ This design means that decisions Yes/No/Yes execute entries 1 and 3 while leavin
 
 **Implementation sub-steps:**
 
-1. **3E.1 — sequential Yes/No decisions:** Narrow the event to the built-in edit type, loop over its entries, display one entry at a time, collect approvals, and filter `event.input.edits`.
-2. **3E.2 — per-entry Other feedback:** Reuse the current feedback input for an individual entry and continue through the remaining entries.
-3. **3E.3 — mixed-result reporting:** Track rejected entries by `toolCallId` and add their summaries to the edit tool result so the model knows what did not execute and why.
-4. **3E.4 — manual testing:** Verify all-Yes, all-No, Yes/No/Yes, middle-entry Other, cancellation, invalid edit text, and a large individual entry.
+1. **3E.1 — sequential Yes/No decisions (implementation complete; manual verification pending):** The code narrows the event to the built-in edit type, loops over its entries, displays one entry at a time, collects approvals, and filters `event.input.edits`.
+2. **3E.2 — per-entry Other feedback (not started):** Reuse the current feedback input for an individual entry and continue through the remaining entries without blocking independently approved entries.
+3. **3E.3 — mixed-result reporting (not started):** Track rejected entries by `toolCallId` and add their summaries to the edit tool result so the model knows what did not execute and why.
+4. **3E.4 — manual testing (next action begins with 3E.1 verification):** Verify all-Yes, all-No, Yes/No/Yes, middle-entry Other, cancellation, invalid edit text, and a large individual entry.
 5. **3E.5 — optional renderer cleanup:** After behavior is correct, decide whether Pi's original combined edit rendering should be replaced with a compact summary. This is not required for the first per-entry implementation.
+
+**End-of-day session checkpoint:**
+
+- Work stopped immediately before manually testing the 3E.1 implementation.
+- The code should currently ask once for every edit entry and show that entry's old/new text.
+- Yes adds an entry to `approvedEdits`; No or cancellation omits it.
+- If at least one entry is approved and no Other choice was made, `event.input.edits` is replaced with the approved subset and Pi's built-in edit tool is allowed to run.
+- If no entries are approved, the complete call is blocked.
+- Other feedback is collected, but any Other choice intentionally blocks the complete call at this intermediate stage. Do not treat per-entry Other as complete yet.
+- No `tool_result` correlation or temporary `Map` has been added.
 
 **Concepts taught:**
 
@@ -929,4 +939,14 @@ Relevant installed implementation/type declarations inspected:
 
 ## Next recommended action
 
-Start **Milestone 3E.1** with the smallest code change that handles sequential Yes/No decisions for each entry in an `edit` call. Use `isToolCallEventType("edit", event)` for typed input, collect approved entries without executing immediately, replace `event.input.edits` with the approved subset, and block only when the subset is empty. Keep the existing single Yes/No/Other workflow for `write` unchanged. Add per-entry Other feedback and mixed-result reporting only in the following sub-steps.
+Resume at **Milestone 3E.1 manual verification**:
+
+1. Reload/start Pi with the updated extension so the new code is active.
+2. Reset a disposable file to a known baseline before each test.
+3. Test a three-entry edit with Yes/Yes/Yes and verify that all three entries execute.
+4. Reset the file, then test Yes/No/Yes and verify that only entries 1 and 3 execute.
+5. Reset the file, then test all No and verify that the call is blocked and the file remains unchanged.
+6. Test cancellation on one entry and verify that the cancelled entry is omitted while independently approved entries execute.
+7. Perform a quick `write` regression test and verify that its existing one-prompt Yes/No/Other behavior is unchanged.
+
+If these checks pass, mark 3E.1 complete and begin 3E.2. Do not expect partial execution after selecting Other yet: at the current checkpoint, any Other choice deliberately blocks the complete edit call so its feedback cannot be lost.
