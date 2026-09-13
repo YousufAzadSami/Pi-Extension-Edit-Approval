@@ -68,6 +68,18 @@ Escape or cancellation counts as **No**.
 
 Only an operation explicitly approved with **Yes** may execute.
 
+### Deferred requirement: selective approval
+
+The initial all-or-nothing workflow is acceptable: when one tool call contains several changes, the user can choose **Other**, identify the acceptable changes, and review the model's revised proposal.
+
+A later version must support direct partial approval where a proposal can be safely divided into independent changes:
+
+- show numbered changes with enough context to judge each one;
+- allow the user to approve only selected changes;
+- never execute unselected changes or treat partial approval as approval of the whole call;
+- for `edit`, initially use independently applicable `edits[]` entries or clearly defined diff hunks; and
+- for `write` or an inseparable edit, continue to block and request a revised proposal unless reliable partial application is implemented.
+
 ### Preview progression
 
 1. Reuse Pi's built-in terminal rendering.
@@ -362,11 +374,11 @@ Never pass the real target as an editable preview file. Handle spaces without sh
 
 Teach Node.js filesystem APIs, temporary directories, child processes, `try/finally`, Windows executable discovery, configuration, and fallback behavior.
 
-### Milestone 6 — configuration and policy
+### Milestone 6 — selective approval, configuration, and policy
 
 **Status:** Pending.
 
-Start with hard-coded safe defaults. Add settings only after the core behavior is understood and tested.
+After preview and rationale behavior is stable, implement direct selective approval for safely separable changes while retaining **Other** → revised proposal as the fallback. Start with hard-coded safe defaults and add settings only after the core behavior is understood and tested.
 
 Candidates:
 
@@ -375,7 +387,8 @@ Candidates:
 - no-UI policy;
 - protected paths;
 - preview byte/line limits;
-- allow-once/session behavior; and
+- allow-once/session behavior;
+- selectable `edit` entries or diff hunks; and
 - optional shell-mutation policy.
 
 ### Milestone 7 — tests and packaging
