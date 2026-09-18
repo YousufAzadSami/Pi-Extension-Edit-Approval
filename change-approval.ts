@@ -80,7 +80,6 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
         if (isToolCallEventType("edit", event)) {
             const approvedEdits: typeof event.input.edits = [];
             const rejectionReasons: string[] = [];
-            let otherWasSelected = false;
 
             for (const [index, edit] of event.input.edits.entries()) {
                 const editNumber = index + 1;
@@ -96,22 +95,24 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
                 }
 
                 if (decision.choice === "other") {
-                    otherWasSelected = true;
                     rejectionReasons.push(decision.feedback
                         ? `Edit ${editNumber} rejected with feedback: ${decision.feedback}`
                         : `Edit ${editNumber} rejected without additional feedback`);
                     continue;
                 }
 
-                rejectionReasons.push(decision.choice === "no"
-                    ? `Edit ${editNumber} rejected by the user`
-                    : `Edit ${editNumber} approval was cancelled`);
+                if (decision.choice === "no") {
+                    rejectionReasons.push(`Edit ${editNumber} rejected by the user`);
+                    continue;
+                }
+
+                rejectionReasons.push(`Edit ${editNumber} approval was cancelled`);
             }
 
-            if (otherWasSelected || approvedEdits.length === 0) {
+            if (approvedEdits.length === 0) {
                 return {
                     block: true,
-                    reason: `User rejected one or more edit entries:\n${rejectionReasons.join("\n")}`,
+                    reason: `No edit entries were approved:\n${rejectionReasons.join("\n")}`,
                 };
             }
 
