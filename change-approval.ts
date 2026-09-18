@@ -156,7 +156,7 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
 
         debugNotify(
             ctx,
-            `Received tool result: ${event.toolName} (${event.toolCallId})`,
+            `Received tool result: ${event.toolName} - (${event.toolCallId})`,
         );
 
         const rejectionReasons = pendingEditRejections.get(event.toolCallId);
