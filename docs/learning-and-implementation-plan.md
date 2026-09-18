@@ -21,7 +21,7 @@ This is the roadmap and session handoff for a Pi extension that asks permission 
 | Deployment goal | One global Pi extension, installed separately on each machine |
 | Pi version most recently observed | `0.85.1` on the current machine |
 
-The extension provides a working Yes/No/Other gate. For multi-entry `edit` calls, it can review each entry separately and apply the approved subset. Handling mixed results and `Other` feedback is not complete yet.
+The extension now reviews each `edit` entry separately, applies the approved subset, and reports rejected entries to the model after partial execution. The Milestone 3A implementation is complete, but end-to-end manual testing is still pending.
 
 ### Repository and local checkouts
 
@@ -35,7 +35,7 @@ Known local checkouts:
 | Work Laptop | `D:/others/Pi-Extension` |
 | Work Desktop | `D:/personal/Pi-Extension-Edit-Approval` |
 
-Verify these paths rather than assuming they still exist. The branch observed before this update was `main`, tracking and synchronized with `origin/main`.
+Verify these paths rather than assuming they still exist. Current development is on `Milestone-03`, based on `main`.
 
 The extension is separate from the Argon product and must not be implemented in the Argon source tree. Any Argon handoff file should only point to this canonical plan, not duplicate it.
 
@@ -265,21 +265,22 @@ Explicit `-e` loading prevents experimental behavior from affecting ordinary ses
 
 `change-approval.ts` currently:
 
-- registers a `tool_call` listener;
-- ignores tools other than `edit` and `write`;
+- registers `tool_call` and `tool_result` listeners;
+- ignores tools other than `edit` and `write` during approval;
 - uses `isToolCallEventType()` to narrow built-in tool inputs safely;
+- uses one shared helper for Yes/No/Other decisions and feedback;
 - keeps one whole-operation Yes/No/Other prompt for `write`;
 - reviews every `edit` entry in order and shows its old and new text;
-- applies the approved subset for mixed Yes/No decisions;
-- blocks an `edit` when no entry is approved;
-- currently blocks the whole `edit` if any entry uses **Other**;
+- applies the approved subset for mixed Yes/No/Other decisions;
+- blocks an `edit` when no entry is approved and returns all decision details;
+- stores partial rejection summaries in a `Map` keyed by `toolCallId`;
+- appends those summaries to the matching tool result and then removes the temporary state;
 - fails closed when no UI is available; and
-- has `DEBUG_ENABLED = true` for learning notifications.
+- has `DEBUG_ENABLED = true` for learning notifications, including every tool result.
 
-Not yet implemented:
+Not yet implemented or verified:
 
-- applying approved edit entries when another entry uses **Other**;
-- reporting rejected entries and feedback alongside a successful partial edit result;
+- end-to-end manual testing of mixed edit decisions and model-visible summaries;
 - a combined approval-and-preview component;
 - an old/new `write` diff;
 - required model rationale;
@@ -327,18 +328,21 @@ Added nested input, optional values, optional chaining, trimming, conditional re
 Implemented:
 
 1. Narrow `edit` and `write` events with `isToolCallEventType()`.
-2. Review each item in `event.input.edits` in order.
-3. Collect entries approved with **Yes**.
-4. Remove entries rejected with **No** or cancellation.
-5. Replace `event.input.edits` with the approved subset before execution.
-6. Block the call when no entry is approved.
+2. Use a shared helper for Yes/No/Other decisions.
+3. Review each item in `event.input.edits` in order.
+4. Collect entries approved with **Yes**.
+5. Exclude entries rejected with **No**, **Other**, or cancellation.
+6. Replace `event.input.edits` with the approved subset before execution.
+7. Block the call and return all decision details when no entry is approved.
+8. Store partial rejection summaries by `toolCallId`.
+9. Append those summaries in `tool_result` and remove the temporary state.
 
-Next:
+Manual verification still needed:
 
-1. Make **Other** reject only its current entry, without blocking approved sibling entries.
-2. Store rejection summaries temporarily by `toolCallId`.
-3. Add a `tool_result` handler that appends those summaries to the normal result.
-4. Remove the temporary state after the matching result.
+1. Confirm all-Yes execution.
+2. Confirm Yes/No/Yes partial execution and model-visible rejection details.
+3. Confirm Yes/Other/No/Yes applies only entries 1 and 4 and returns the feedback.
+4. Confirm all-rejected calls are blocked and leave the file unchanged.
 
 The model-facing summary must distinguish:
 
@@ -543,4 +547,4 @@ Relevant implementation/type declarations:
 
 ## Next action
 
-Continue Milestone 3A. Change per-entry **Other** so it excludes only that entry while approved sibling entries still execute. Track rejected entries by `toolCallId`, append their summaries in `tool_result`, and manually test Yes/Other/No/Yes before continuing to preview work.
+Resume Milestone 3A with end-to-end manual testing in a disposable workspace. Test all Yes, Yes/No/Yes, Yes/Other/No/Yes, and all-rejected flows. Confirm that only approved entries change the file, the model receives every rejection summary, and temporary `Map` state is removed. Record the results here before starting Milestone 3B preview work.
