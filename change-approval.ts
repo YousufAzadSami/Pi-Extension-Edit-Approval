@@ -52,6 +52,8 @@ async function askForDecision(
 }
 
 export default function changeApprovalExtension(pi: ExtensionAPI) {
+    const pendingEditRejections = new Map<string, string[]>();
+
     pi.on("tool_call", async function handleToolCall(event, ctx) {
 
         let path: string;
@@ -116,6 +118,10 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
                 };
             }
 
+            if (rejectionReasons.length > 0) {
+                pendingEditRejections.set(event.toolCallId, rejectionReasons);
+            }
+
             event.input.edits = approvedEdits;
             return undefined;
         }
@@ -143,6 +149,37 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
         return {
             block: true,
             reason: "User rejected this operation",
+        };
+    });
+
+    pi.on("tool_result", function handleToolResult(event, ctx) {
+
+        debugNotify(
+            ctx,
+            `Received tool result: ${event.toolName} (${event.toolCallId})`,
+        );
+
+        const rejectionReasons = pendingEditRejections.get(event.toolCallId);
+
+        if (!rejectionReasons) {
+            return undefined;
+        }
+
+        debugNotify(
+            ctx,
+            `Adding ${rejectionReasons.length} rejection reason(s) to ${event.toolName} result`,
+        );
+
+        pendingEditRejections.delete(event.toolCallId);
+
+        return {
+            content: [
+                ...event.content,
+                {
+                    type: "text",
+                    text: `The following proposed edit entries were not approved and were not applied:\n${rejectionReasons.join("\n")}`,
+                },
+            ],
         };
     });
 }
