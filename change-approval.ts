@@ -14,6 +14,43 @@ function debugNotify(ctx: ExtensionContext, message: string): void {
     ctx.ui.notify(`SAMI: ${message}`, "info");
 }
 
+type ApprovalDecision =
+    | { choice: "yes" }
+    | { choice: "no" }
+    | { choice: "other"; feedback?: string }
+    | { choice: "cancelled" };
+
+async function askForDecision(
+    ctx: ExtensionContext,
+    title: string,
+    feedbackPrompt: string,
+): Promise<ApprovalDecision> {
+    const choice = await ctx.ui.select(title, ["Yes", "No", "Other"]);
+
+    if (choice === "Yes") {
+        return { choice: "yes" };
+    }
+
+    if (choice === "Other") {
+        const feedback = await ctx.ui.input(
+            feedbackPrompt,
+            "Write your instructions",
+        );
+        const trimmedFeedback = feedback?.trim();
+
+        return {
+            choice: "other",
+            feedback: trimmedFeedback || undefined,
+        };
+    }
+
+    if (choice === "No") {
+        return { choice: "no" };
+    }
+
+    return { choice: "cancelled" };
+}
+
 export default function changeApprovalExtension(pi: ExtensionAPI) {
     pi.on("tool_call", async function handleToolCall(event, ctx) {
 
@@ -39,6 +76,7 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
             };
         }
 
+        // For edit tool calls
         if (isToolCallEventType("edit", event)) {
             const approvedEdits: typeof event.input.edits = [];
             const rejectionReasons: string[] = [];
@@ -46,31 +84,26 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
 
             for (const [index, edit] of event.input.edits.entries()) {
                 const editNumber = index + 1;
-                const choice = await ctx.ui.select(
+                const decision = await askForDecision(
+                    ctx,
                     `Approve edit ${editNumber} of ${event.input.edits.length}?\n\nFile: ${path}\n\nOld text:\n${edit.oldText}\n\nNew text:\n${edit.newText}`,
-                    ["Yes", "No", "Other"],
+                    `What should Pi do instead for edit ${editNumber}?`,
                 );
 
-                if (choice === "Yes") {
+                if (decision.choice === "yes") {
                     approvedEdits.push(edit);
                     continue;
                 }
 
-                if (choice === "Other") {
+                if (decision.choice === "other") {
                     otherWasSelected = true;
-                    const feedback = await ctx.ui.input(
-                        `What should Pi do instead for edit ${editNumber}?`,
-                        "Write your instructions",
-                    );
-                    const trimmedFeedback = feedback?.trim();
-
-                    rejectionReasons.push(trimmedFeedback
-                        ? `Edit ${editNumber} rejected with feedback: ${trimmedFeedback}`
+                    rejectionReasons.push(decision.feedback
+                        ? `Edit ${editNumber} rejected with feedback: ${decision.feedback}`
                         : `Edit ${editNumber} rejected without additional feedback`);
                     continue;
                 }
 
-                rejectionReasons.push(choice === "No"
+                rejectionReasons.push(decision.choice === "no"
                     ? `Edit ${editNumber} rejected by the user`
                     : `Edit ${editNumber} approval was cancelled`);
             }
@@ -86,27 +119,22 @@ export default function changeApprovalExtension(pi: ExtensionAPI) {
             return undefined;
         }
 
-        const choice = await ctx.ui.select(
+        // For write tool calls
+        const decision = await askForDecision(
+            ctx,
             `Approve ${event.toolName} operation?\n\nFile: ${path}`,
-            ["Yes", "No", "Other"],
+            "What should Pi do instead?",
         );
 
-        if (choice === "Yes") {
+        if (decision.choice === "yes") {
             return undefined;
         }
 
-        if (choice === "Other") {
-            const feedback = await ctx.ui.input(
-                "What should Pi do instead?",
-                "Write your instructions",
-            );
-
-            const trimmedFeedback = feedback?.trim();
-
+        if (decision.choice === "other") {
             return {
                 block: true,
-                reason: trimmedFeedback
-                    ? `User rejected this operation with feedback: ${trimmedFeedback}`
+                reason: decision.feedback
+                    ? `User rejected this operation with feedback: ${decision.feedback}`
                     : "User rejected this operation without additional feedback",
             };
         }
