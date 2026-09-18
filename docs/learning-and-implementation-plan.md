@@ -13,7 +13,7 @@ This is the roadmap and session handoff for a Pi extension that asks permission 
 
 | Item | Current state |
 |---|---|
-| Progress | Milestones 0–2 complete; Milestone 3 is next |
+| Progress | Milestones 0–2 complete; Milestone 3 is in progress |
 | Implementation | `change-approval.ts` |
 | Canonical plan | `docs/learning-and-implementation-plan.md` |
 | Repository | `https://github.com/YousufAzadSami/Pi-Extension-Edit-Approval` |
@@ -21,7 +21,7 @@ This is the roadmap and session handoff for a Pi extension that asks permission 
 | Deployment goal | One global Pi extension, installed separately on each machine |
 | Pi version most recently observed | `0.85.1` on the current machine |
 
-The current extension provides a working Yes/No/Other gate. It does **not** yet satisfy the complete preview and rationale requirements.
+The extension provides a working Yes/No/Other gate. For multi-entry `edit` calls, it can review each entry separately and apply the approved subset. Handling mixed results and `Other` feedback is not complete yet.
 
 ### Repository and local checkouts
 
@@ -51,22 +51,27 @@ Whenever Pi requests `edit` or `write`:
 2. Show the operation, target path, proposed change, and the model's concise reason for it.
 3. Ask for one of:
    - **Yes** — execute that exact proposal.
-   - **No** — reject it.
-   - **Other** — collect custom feedback and reject it.
+   - **No** — reject it and do not retry it automatically.
+   - **Other** — reject it, collect feedback, and let the model propose an alternative.
 
 Escape or cancellation counts as **No**.
 
+A multi-entry `edit` call is reviewed one entry at a time. Each answer affects only that entry:
+
+- **Yes:** include the entry in the approved subset.
+- **No:** leave the entry out and tell the model it was rejected.
+- **Other:** leave the entry out and return the user's feedback to the model.
+
+After all entries are reviewed, apply the approved subset together. For example, answers Yes/Other/No/Yes apply only entries 1 and 4.
+
 ### Safe meaning of `Other`
 
-`Other` must never modify and then execute the original request. It must:
+**Other rejects the proposal being reviewed, sends the user's feedback to the model, and requires approval for any replacement.**
 
-1. collect the user's text;
-2. block the current tool call;
-3. return non-empty feedback to the model as the blocking reason;
-4. let the model propose a revision; and
-5. require approval again for the revised call.
+The meaning of “proposal” depends on the tool:
 
-Only an operation explicitly approved with **Yes** may execute.
+- For `write`, the proposal is the complete file creation or replacement.
+- For a multi-entry `edit`, each entry is reviewed as its own proposal. Rejecting one entry does not stop other entries approved with **Yes** from executing.
 
 ### Preview progression
 
@@ -262,15 +267,19 @@ Explicit `-e` loading prevents experimental behavior from affecting ordinary ses
 
 - registers a `tool_call` listener;
 - ignores tools other than `edit` and `write`;
-- displays the operation and target path;
-- allows only a **Yes** result;
-- treats **No**, Escape, and cancellation as rejection;
-- makes **Other** collect optional feedback and always block the original call;
+- uses `isToolCallEventType()` to narrow built-in tool inputs safely;
+- keeps one whole-operation Yes/No/Other prompt for `write`;
+- reviews every `edit` entry in order and shows its old and new text;
+- applies the approved subset for mixed Yes/No decisions;
+- blocks an `edit` when no entry is approved;
+- currently blocks the whole `edit` if any entry uses **Other**;
 - fails closed when no UI is available; and
-- has `DEBUG_ENABLED = true`, notifying the user about ignored tool names and target paths for learning.
+- has `DEBUG_ENABLED = true` for learning notifications.
 
 Not yet implemented:
 
+- applying approved edit entries when another entry uses **Other**;
+- reporting rejected entries and feedback alongside a successful partial edit result;
 - a combined approval-and-preview component;
 - an old/new `write` diff;
 - required model rationale;
@@ -307,23 +316,48 @@ Added nested input, optional values, optional chaining, trimming, conditional re
 
 **Manual test record:** Empty or cancelled input blocked without feedback. Non-empty feedback reached the model; the model proposed a revision; the revision prompted again and executed only after a later **Yes**.
 
-### Milestone 3 — terminal previews
+### Milestone 3 — per-entry edit approval and terminal previews
 
-**Status:** Pending and next.
+**Status:** In progress.
 
-**Goal:** Make the proposal understandable without leaving the terminal.
+**Goal:** Review each proposed edit clearly, apply only approved entries, and report every decision to the model.
 
-Steps:
+#### 3A — per-entry `edit` decisions
+
+Implemented:
+
+1. Narrow `edit` and `write` events with `isToolCallEventType()`.
+2. Review each item in `event.input.edits` in order.
+3. Collect entries approved with **Yes**.
+4. Remove entries rejected with **No** or cancellation.
+5. Replace `event.input.edits` with the approved subset before execution.
+6. Block the call when no entry is approved.
+
+Next:
+
+1. Make **Other** reject only its current entry, without blocking approved sibling entries.
+2. Store rejection summaries temporarily by `toolCallId`.
+3. Add a `tool_result` handler that appends those summaries to the normal result.
+4. Remove the temporary state after the matching result.
+
+The model-facing summary must distinguish:
+
+- **No:** rejected; do not retry automatically.
+- **Other:** rejected with feedback; a revised proposal may be made as a new approval request.
+
+If every entry is rejected, return the summaries in the blocking reason because no tool result will follow.
+
+#### 3B — terminal preview quality
 
 1. Test the built-in pre-execution diff for valid `edit` calls.
 2. Test expanded `write` content for new and existing files.
 3. Check preview visibility while `ctx.ui.select` is open.
-4. If inadequate, build a custom TUI approval component containing operation, path, available rationale, preview, choices, and keyboard help.
-5. Add a true old/new diff for `write`.
+4. If needed, build a custom TUI component with a size-limited or scrollable preview.
+5. Add a true old/new diff for existing-file `write` operations.
 
-Teach custom components, width-safe rendering, keyboard handling, ANSI-safe wrapping, themes, in-memory previews, and non-mutating reads.
+Teach typed narrowing, arrays, filtering, mutable tool arguments, `toolCallId` correlation, temporary `Map` state, custom components, width-safe rendering, and in-memory previews.
 
-**Done when:** the proposal is visible before approval; preview code never writes; additions/removals are distinct; large previews are truncated or scrollable; and preview errors reject safely or clearly warn the user.
+**Done when:** each edit decision affects only its entry; approved entries execute together; rejected entries remain unchanged; the model receives a clear mixed-result summary; proposals are visible before approval; and large previews remain usable.
 
 ### Milestone 4 — required rationale
 
@@ -387,10 +421,13 @@ Move pure decision and preview logic into testable functions. Add tests, TypeScr
 Test backlog:
 
 - non-target tools are ignored;
-- Yes allows; No/Escape block;
-- Other always blocks the original and preserves feedback;
+- whole-operation `write` Yes/No/Other behavior;
+- multi-entry edit: all Yes;
+- multi-entry edit: Yes/No/Yes;
+- multi-entry edit: Yes/Other/No/Yes;
+- all edit entries rejected;
+- rejection summaries reach the model and temporary state is cleaned up;
 - missing and existing-file write previews;
-- multiple edit replacements;
 - no-UI failure;
 - paths with spaces;
 - preview size limits;
@@ -406,8 +443,11 @@ Use disposable files or Git so every change can be inspected and undone.
 | Read `existing.txt` | No approval prompt |
 | Edit it; choose No | File unchanged |
 | Repeat; choose Yes | Exact proposal executes |
+| Multi-entry edit; choose Yes/No/Yes | Only entries 1 and 3 execute; the model sees that entry 2 was rejected |
+| Multi-entry edit; choose Yes/Other/No/Yes | Only entries 1 and 4 execute; the model receives feedback for entry 2 and rejection status for entry 3 |
+| Reject every edit entry | Complete call is blocked; file is unchanged |
 | Create `new.txt`; choose No | File not created |
-| Choose Other and request a different filename | Original blocked; revised write prompts again |
+| Choose Other for a write and request a different filename | Original write is rejected; revised write prompts again |
 | Request a write in print mode | Blocked because approval UI is unavailable |
 
 Before each test, record initial content. Include both new and existing files when testing `write` previews.
@@ -435,7 +475,7 @@ Also:
 1. One logical extension; multiple modules only when useful.
 2. Begin with Pi's terminal UI and existing preview.
 3. Gate execution at `tool_call` and fail closed when approval is unavailable.
-4. Treat Escape as No; `Other` blocks and returns optional guidance.
+4. Treat Escape as No. `Other` rejects the proposal being reviewed and returns optional guidance; approved sibling entries in a multi-entry `edit` may still execute.
 5. Add a genuine old/new `write` diff later.
 6. Never fabricate semantic rationale; require a concise stated reason through wrapped tools.
 7. Intercepting only `edit`/`write` is intentional initial scope, not sandboxing.
@@ -503,4 +543,4 @@ Relevant implementation/type declarations:
 
 ## Next action
 
-Begin Milestone 3 by testing Pi's built-in pre-execution previews for valid edits and for writes to both new and existing files. Decide whether the preview remains usable while the approval selector is open before writing custom TUI or diff code.
+Continue Milestone 3A. Change per-entry **Other** so it excludes only that entry while approved sibling entries still execute. Track rejected entries by `toolCallId`, append their summaries in `tool_result`, and manually test Yes/Other/No/Yes before continuing to preview work.
