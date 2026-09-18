@@ -13,7 +13,7 @@ This is the roadmap and session handoff for a Pi extension that asks permission 
 
 | Item | Current state |
 |---|---|
-| Progress | Milestones 0–2 complete; Milestone 3 is in progress |
+| Progress | Milestones 0–3A complete; Milestone 3B is next |
 | Implementation | `change-approval.ts` |
 | Canonical plan | `docs/learning-and-implementation-plan.md` |
 | Repository | `https://github.com/YousufAzadSami/Pi-Extension-Edit-Approval` |
@@ -21,7 +21,7 @@ This is the roadmap and session handoff for a Pi extension that asks permission 
 | Deployment goal | One global Pi extension, installed separately on each machine |
 | Pi version most recently observed | `0.85.1` on the current machine |
 
-The extension now reviews each `edit` entry separately, applies the approved subset, and reports rejected entries to the model after partial execution. The Milestone 3A implementation is complete, but end-to-end manual testing is still pending.
+The extension now reviews each `edit` entry separately, applies the approved subset, and reports rejected entries to the model after partial execution. Milestone 3A implementation and end-to-end manual verification are complete. Milestone 3B terminal preview evaluation is next.
 
 ### Repository and local checkouts
 
@@ -229,7 +229,8 @@ Current layout:
 <local-clone>/
 ├── change-approval.ts
 └── docs/
-    └── learning-and-implementation-plan.md
+    ├── learning-and-implementation-plan.md
+    └── typescript-and-pi-questions-and-answers.md
 ```
 
 Possible mature layout:
@@ -280,7 +281,6 @@ Explicit `-e` loading prevents experimental behavior from affecting ordinary ses
 
 Not yet implemented or verified:
 
-- end-to-end manual testing of mixed edit decisions and model-visible summaries;
 - a combined approval-and-preview component;
 - an old/new `write` diff;
 - required model rationale;
@@ -325,6 +325,8 @@ Added nested input, optional values, optional chaining, trimming, conditional re
 
 #### 3A — per-entry `edit` decisions
 
+**Status:** Complete.
+
 Implemented:
 
 1. Narrow `edit` and `write` events with `isToolCallEventType()`.
@@ -337,12 +339,15 @@ Implemented:
 8. Store partial rejection summaries by `toolCallId`.
 9. Append those summaries in `tool_result` and remove the temporary state.
 
-Manual verification still needed:
+Manual verification completed in a disposable 50-line file:
 
-1. Confirm all-Yes execution.
-2. Confirm Yes/No/Yes partial execution and model-visible rejection details.
-3. Confirm Yes/Other/No/Yes applies only entries 1 and 4 and returns the feedback.
-4. Confirm all-rejected calls are blocked and leave the file unchanged.
+1. **All Yes:** both entries in a two-entry call were applied.
+2. **Mixed Yes/No:** a two-entry Yes/No call applied only entry 1 and reported entry 2 to the model. A later Yes/No/No/Yes call applied only entries 1 and 4, confirming that approvals after rejections still execute. This provides the intended Yes/No/Yes coverage, although that exact three-entry sequence was not run literally.
+3. **Yes/Other/No/Yes:** the original four-entry call applied only entries 1 and 4. The model received entry 2 feedback and entry 3 rejection details. A replacement based on the feedback was submitted as a new tool call and executed only after separate approval.
+4. **All rejected:** a four-entry call was blocked, listed all four rejection reasons, and left all four target lines unchanged.
+5. **Temporary state:** mixed-call summaries appeared only on their matching results. Code review confirmed that the matching `Map` entry is deleted before the modified result is returned.
+
+The disposable test file was removed after verification.
 
 The model-facing summary must distinguish:
 
@@ -547,4 +552,4 @@ Relevant implementation/type declarations:
 
 ## Next action
 
-Resume Milestone 3A with end-to-end manual testing in a disposable workspace. Test all Yes, Yes/No/Yes, Yes/Other/No/Yes, and all-rejected flows. Confirm that only approved entries change the file, the model receives every rejection summary, and temporary `Map` state is removed. Record the results here before starting Milestone 3B preview work.
+Begin Milestone 3B by evaluating terminal preview quality. First, record whether Pi's built-in `edit` diff and the approval prompt's old/new text remain clear and visible while `ctx.ui.select()` is open. Then test expanded `write` previews for both new and existing files before deciding whether a custom TUI component is needed.
